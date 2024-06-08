@@ -7,14 +7,16 @@
 char* convert2buffer(WINDOW *win){
     int cols,lines;
     getmaxyx(win, lines,cols);
-    char* buffer = malloc(lines*cols+1);
+    char* buffer = malloc(lines * (cols + 1) + 1);
     if (buffer == NULL) {
     return NULL;
     }
+    size_t pos = 0;
     for(int i = 0; i<lines;i++){
         for(int j = 0; j<cols; j++){
-            buffer[i*cols+j] =mvwinch(win, i, j) & A_CHARTEXT;
+            buffer[pos++] =(char)mvwinch(win, i, j)& A_CHARTEXT;
         }
+        buffer[pos++] = '\n';
     }
     buffer[lines*cols] = '\0';
     return buffer;
@@ -85,20 +87,26 @@ char* execute_command(unsigned short command, char* attrib, WINDOW *win){
     FILE *fptr = fopen(attrib, "w");
         if(fptr == NULL){
         mvwprintw(win, 0 , 15, "ERROR");
-        break;
+        return "NULL";
     }
-    char* contents =convert2buffer(win);
-    fprintf(fptr, "%s", contents);
-    free(contents);        
+    char* contents =convert2buffer(stdscr);
+    if (contents == NULL) { // Check if convert2buffer failed
+        fclose(fptr); // Close the file before returning
+        mvwprintw(win, 0, 15, "ERROR: convert2buffer returned NULL");
+        return "NULL";
+    }
+    fprintf(fptr, "%s",contents);
+    free(contents);
     fclose(fptr);
-    return NULL;
+    return "NULL";
     break;
     case 4:
     return "HF";
     default:
-    return NULL;
+    return "NULL";
         break;
     }
+    free(attrib);
 }
 char* extract_modifier(char *buffer) {
     int startpos = -1;
@@ -168,78 +176,89 @@ char* extract_modifier(char *buffer) {
     };
 
 void highlight(char* input){
-    const char delimiters[] =";/() +-><*&\n,^.?!_{}[]:|@#$";
+    const char delimiters[] = " ;/()+-><*&\n,^.?!_{}[]:|@#$\001";
     start_color();
-    init_pair(1, COLOR_RED, COLOR_BLACK) ;
+    init_pair(1, COLOR_RED, COLOR_BLACK);
     init_pair(2, COLOR_WHITE, COLOR_BLACK);
     init_pair(3, COLOR_CYAN, COLOR_BLACK);
     init_pair(4, COLOR_BLUE, COLOR_BLACK);
     init_pair(5, COLOR_YELLOW, COLOR_BLACK);
     init_pair(6, COLOR_MAGENTA, COLOR_BLACK);
     init_pair(7, COLOR_GREEN, COLOR_BLACK);
-int* color_pairs = calloc(1, strlen(input)+1);
-char* removed_chars = malloc(strlen(input)+1);
-memset(removed_chars, 'i', strlen(input));
-memset(color_pairs, 0, strlen(input));
-char* output = malloc(strlen(input+1));
-for (int i = 0; i < strlen(input); i++) {
-    for (int o = 0; o < strlen(delimiters); o++) {
-        if (input[i] == delimiters[o]) {
-            removed_chars[i] = delimiters[o];
-            break;
-        }
-    }
-}
-    char* token = strtok(input, delimiters);
-    while (token != NULL) {
 
-        int start_index = token - input;
-        //mvprintw(3, 0, "start index is %i",start_index);
-        for(int o = 0; strcmp(Ckeywords[o], "@END@") !=0;o++){
-            if(strcmp(token, Ckeywords[o]) ==0){
-                //mvprintw(1,0,"%s",token);
-                color_pairs[start_index] = 4;
+    int input_len = strlen(input);
+    int* color_pairs = calloc(input_len + 1, sizeof(int));
+    char* removed_chars = malloc(input_len + 1);
+    char* input_copy = strdup(input);  // Create a copy of input for strtok to modify
+    memset(removed_chars, 1, input_len);
+    memset(color_pairs, 0, input_len);
+
+    // Identify delimiter positions
+    for (int i = 0; i < input_len; i++) {
+        for (int o = 0; o < sizeof(delimiters) - 1; o++) {
+            if (input[i] == delimiters[o]) {
+                removed_chars[i] = input[i];
+                break;
             }
         }
+    }
+
+    char* token = strtok(input_copy, delimiters);
+    while (token != NULL) {
+        int start_index = token - input_copy;
+        for (int o = 0; strcmp(Ckeywords[o], "@END@") != 0; o++) {
+            if (strcmp(token, Ckeywords[o]) == 0) {
+                color_pairs[start_index] = 4;
+            }
+
+        }
+        if(color_pairs[start_index] == 0){
+            color_pairs[start_index] = 1;
+        }
         token = strtok(NULL, delimiters);
-
-
     }
-//mvprintw(4,0, "%s", removed_chars);
-//reassemble
-    for(int r = 0; r<strlen(input); r++){
-        if(removed_chars[r] !='i'){
+
+    // Reassemble the output
+    char* output = malloc(input_len + 1);
+    for (int r = 0; r < input_len; r++) {
+        if (input_copy[r] == '\0') {
             output[r] = removed_chars[r];
-        }
-        else{
-            output[r]  = input[r];
+        } else {
+            output[r] = input[r];
         }
     }
-    output[strlen(input)+1] = '\0';
-    //print
-    int posx = 0;
-    int posy = 0;
-    int color;
-    int prevcolor;    
+    output[input_len] = '\0';  // Ensure null-termination
 
-    for(int y = 0; y<strlen(output); y++){
-        color = color_pairs[y];
-        if(color == 0){
+    // Print with highlighting
+    int posx = 0, posy = 0;
+    int prevcolor = 1;  // Default color
+    for (int y = 0; y < input_len; y++) {
+
+        int color = color_pairs[y];
+        if (color == 0 && prevcolor != 0) {
             color = prevcolor;
         }
+        if (output[y] == '\n') {
+            posx = 0;
+            posy++;
+            attroff(COLOR_PAIR(color));
+            mvaddch(posy, posx, output[y]);
+            attron(COLOR_PAIR(1));
+
+        }
+        else{
         attron(COLOR_PAIR(color));
         mvaddch(posy, posx, output[y]);
         attroff(COLOR_PAIR(color));
-        if(posx<LINES)posx++;
-        else{
-            posx = 0;
-            posy++;
+        posx++;
         }
-    prevcolor = color;
+
+
+        prevcolor = color;
     }
 
+    free(input_copy);
     free(output);
     free(color_pairs);
     free(removed_chars);
-
 }
