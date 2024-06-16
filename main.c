@@ -82,14 +82,13 @@ int size_of_line(int cursorY, WINDOW *win) {
     int y, x;
     getmaxyx(win, y,x);
     int xpos = x - 1;
-
     int ch;
     move(cursorY, xpos);
-    while ((ch = inch()) == ' ' && xpos > 0) {
+    while ((ch = inch()) == ' ' || ch =='\n' && xpos >0) {
         xpos--;
         wmove(win, cursorY, xpos);
     }
-    return xpos + 1;
+    return xpos;
 }
 
 void downConsoleWrite() {
@@ -108,10 +107,22 @@ int inputs(int cursorX, int cursorY, int input, unsigned short *console, WINDOW 
             break;
         case KEY_RIGHT:
             if (cursorX < COLS - 1) (cursorX)++;
+            else if(cursorY <LINES-1) {
+                cursorX = 0;
+                cursorY++;
+            }
             break;
+            
         case KEY_LEFT:
             if (cursorX > 0) (cursorX)--;
+            else if(cursorY >0) {
+                cursorX = 0;
+                cursorY--;
+            }
             break;
+        case 26: //ctrl+Z
+        
+        break;
         case 10: // Enter key
             if (cursorY < LINES - 1 && *console == 0) {
                 mvaddch(cursorY, cursorX+1, '\n');
@@ -123,7 +134,6 @@ int inputs(int cursorX, int cursorY, int input, unsigned short *console, WINDOW 
                 unsigned short command = identify_command(commandbuffer1);
                 char *modifier = extract_modifier(commandbuffer1);
                 free(commandbuffer1);
-                mvwprintw(win, cursorY + 1, cursorX, "command: %hu modifier: %s ", command, modifier);
                 char *output = execute_command(command, modifier, win);
                 wrefresh(win);
                 if(strcmp(output, "$EXIT$")==0){
@@ -135,6 +145,8 @@ int inputs(int cursorX, int cursorY, int input, unsigned short *console, WINDOW 
                 else if(strcmp(output, "HF")==0){
                     return 4;
                 }
+                cursorY++;
+                cursorX = 0;
             }
             break;
 case KEY_BACKSPACE:
@@ -142,12 +154,11 @@ case KEY_BACKSPACE:
         cursorX--;
         wmove(win, cursorY, cursorX);
         wdelch(win);
-        //mvprintw(2, 0, "BACKSPACE DETECTED");
     } else if (cursorY > 0 && *console == 0) {
-        (cursorY)--;
+        cursorY--;
         cursorX = size_of_line(cursorY, win);
         wmove(win, cursorY, cursorX);
-        wdelch(win);
+        //wdelch(win);
         //mvprintw(2, 0, "BACKSPACE DETECTED2");
     }
     break;

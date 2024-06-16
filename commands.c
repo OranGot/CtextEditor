@@ -77,8 +77,11 @@ char* execute_command(unsigned short command, char* attrib, WINDOW *win){
             fclose(file);
         }
     buffer[file_size] = '\0';
+    // loadtoscreen(buffer, stdscr);
+    mvwprintw(stdscr,0,0,"%s", buffer);
+    free(buffer);
     fclose(file);
-    return buffer;
+    return "NULL";
     break;
     case 2:
     return "HT";
@@ -172,11 +175,24 @@ char* extract_modifier(char *buffer) {
         "void",
         "volatile",
         "while",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "#include",
+        "#ifndef",
+        "#endif",
         "@END@"
     };
 
 void highlight(char* input){
-    const char delimiters[] = " ;/()+-><*&\n,^.?!_{}[]:|@#$\001";
+    const char delimiters[] = " ;/()+-><*&\n,^.?!_{}[]:|@$\001";
     start_color();
     init_pair(1, COLOR_RED, COLOR_BLACK);
     init_pair(2, COLOR_WHITE, COLOR_BLACK);
@@ -208,12 +224,21 @@ void highlight(char* input){
         int start_index = token - input_copy;
         for (int o = 0; strcmp(Ckeywords[o], "@END@") != 0; o++) {
             if (strcmp(token, Ckeywords[o]) == 0) {
-                color_pairs[start_index] = 4;
+                if(o>31 && o<41){
+                    color_pairs[start_index] = 5;
+                }
+                else if(o>41){
+                    color_pairs[start_index] = 6;
+                }
+                else{
+                    color_pairs[start_index] = 4;
+                }
+
             }
 
         }
         if(color_pairs[start_index] == 0){
-            color_pairs[start_index] = 1;
+            color_pairs[start_index] = 2;
         }
         token = strtok(NULL, delimiters);
     }
@@ -231,7 +256,7 @@ void highlight(char* input){
 
     // Print with highlighting
     int posx = 0, posy = 0;
-    int prevcolor = 1;  // Default color
+    int prevcolor = 2;  // Default color
     for (int y = 0; y < input_len; y++) {
 
         int color = color_pairs[y];
@@ -243,7 +268,7 @@ void highlight(char* input){
             posy++;
             attroff(COLOR_PAIR(color));
             mvaddch(posy, posx, output[y]);
-            attron(COLOR_PAIR(1));
+            attron(COLOR_PAIR(2));
 
         }
         else{
@@ -261,4 +286,13 @@ void highlight(char* input){
     free(output);
     free(color_pairs);
     free(removed_chars);
+}
+char* convert_end_of_line_to_buffer(int cursorY, int cursorX, WINDOW *win){
+    char* buffer = malloc(COLS - cursorY+1);
+    int i;
+    for(i = 0; i<COLS; i++){
+        buffer[i] = mvwinch(win, cursorY, cursorX+i);
+    }
+    buffer[i] = '\0';
+    return buffer;
 }
